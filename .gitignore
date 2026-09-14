@@ -1,0 +1,36 @@
+# --- secrets ---------------------------------------------------------------
+# VITE_* variables are inlined into the bundle at build time and are therefore
+# public, but .env can still hold local-only values. Only .env.example is
+# committed.
+.env
+.env.local
+.env.*.local
+.env.example
+
+
+# --- dependencies and build output ----------------------------------------
+node_modules/
+dist/
+dist-ssr/
+*.tsbuildinfo
+
+# --- tests ----------------------------------------------------------------
+coverage/
+
+# --- vite -----------------------------------------------------------------
+.vite/
+*.local
+
+# --- logs -----------------------------------------------------------------
+*.log
+npm-debug.log*
+
+# --- platform -------------------------------------------------------------
+.vercel/
+
+# --- editors / OS ---------------------------------------------------------
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

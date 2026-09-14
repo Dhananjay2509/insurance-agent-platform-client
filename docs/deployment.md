@@ -73,7 +73,7 @@ Simpler, if you do not need previews: test against production only.
 | Requests 404 with a doubled or missing path | `VITE_API_URL` missing the `/api` suffix, or has a trailing slash | Use `https://<service>.onrender.com/api` |
 | First request after a quiet period hangs ~50s | Render's free plan spun the API down | Expected; see [the API guide](https://github.com/abnair715-png/Insurance-Agent-Platform-server/blob/main/docs/deployment.md) |
 | A deep link like `/customers/123` 404s on refresh | SPA fallback rewrite missing | It is in `vercel.json`; check no dashboard override replaced it |
-| Signed in, then signed out again on refresh | The session token could not be stored | The SPA keeps its JWT in `localStorage`; private mode or blocked site data prevents that |
+| Signed in, then signed out again on refresh | The browser is not returning the session cookie | It is a cross-site cookie. Confirm the API sets `SameSite=None; Secure` (it derives this from `CLIENT_URL`/`API_PUBLIC_URL`), and note that **Safari blocks third-party cookies by default** |
 
 ## Local development
 

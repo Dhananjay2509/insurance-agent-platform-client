@@ -103,20 +103,25 @@ src/
 
 ## Authentication
 
-The API issues its JWT twice: as an httpOnly cookie **and** in the response body.
+The session is an **httpOnly cookie** set by the API. This client stores no
+token — nothing in `localStorage`, nothing in memory — so an XSS bug has no
+session to steal.
 
-Because the client and API are deployed to different origins, a `SameSite=Lax`
-cookie is not sent cross-site — and `SameSite=None` is blocked by Safari's ITP
-and Chrome's third-party cookie restrictions. So this SPA stores the token and
-sends `Authorization: Bearer`, which the API already accepts.
+`services/apiClient.ts` sends `credentials: 'include'` on every request, which is
+what makes the browser attach the cookie on cross-origin calls. `useAuth` asks
+`GET /api/auth/me` once on mount to discover whether a session exists, because
+the client cannot inspect the cookie itself.
 
-**The trade-off, stated plainly:** a token in `localStorage` is readable by
-JavaScript, so an XSS bug could exfiltrate it — the exact exposure an httpOnly
-cookie prevents. What limits the blast radius: a 12-hour expiry, a strict CORS
-allow-list on the API, React's default output escaping, no
-`dangerouslySetInnerHTML` anywhere, and no third-party scripts. Putting both
-projects behind one domain would restore the cookie with no code change, because
-the server never stopped issuing it.
+Because the client and API are on different sites, the API sets the cookie with
+`SameSite=None; Secure`. It derives that automatically from its `CLIENT_URL` and
+`API_PUBLIC_URL`, so local development (same origin via the Vite proxy) still
+gets `Lax`.
+
+> **Known limitation.** A cross-site cookie is a *third-party* cookie, and
+> Safari blocks those by default. On `*.vercel.app` + `*.onrender.com` there is
+> no workaround, since both are public suffixes. Serving the client and API from
+> one registrable domain — `app.example.com` and `api.example.com` — makes the
+> cookie first-party and it works everywhere, with no code change.
 
 ## Configuration
 

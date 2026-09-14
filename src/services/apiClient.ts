@@ -3,12 +3,15 @@
  *
  * Responsibilities kept here so no component repeats them:
  *   - one base URL and one response envelope to unwrap
- *   - `credentials: 'include'` so the httpOnly session cookie is always sent
+ *   - `credentials: 'include'` so the httpOnly session cookie travels with every
+ *     request, including cross-origin ones
  *   - normalising every failure into an `ApiError` with a code and field details
  *   - a global 401 hook so an expired session logs the user out once, centrally
+ *
+ * The session is an httpOnly cookie set by the server. This client holds NO
+ * token: there is nothing in `localStorage`, nothing in memory, and nothing for
+ * an XSS bug to read. The browser attaches and expires the cookie on its own.
  */
-
-import { getStoredToken } from './authToken';
 
 export interface FieldIssue {
   field: string;
@@ -86,17 +89,15 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
 
-  // Sent alongside `credentials: 'include'`, not instead of it: the cookie is
-  // used when the API is same-origin, the Bearer token when it is not.
-  const token = getStoredToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
-
   let response: Response;
   try {
     response = await fetch(`${BASE_URL}${path}`, {
       method,
       headers: Object.keys(headers).length > 0 ? headers : undefined,
       body: body ? JSON.stringify(body) : undefined,
+      // Required for the session cookie to be sent on cross-origin requests.
+      // Without it the browser silently omits the cookie and every authenticated
+      // call returns 401.
       credentials: 'include',
       signal,
     });

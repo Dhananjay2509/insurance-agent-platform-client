@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, api, setUnauthorizedHandler } from './apiClient';
-import { getStoredToken, setStoredToken } from './authToken';
 
 function mockJson(status: number, payload: unknown) {
   return vi.fn().mockResolvedValue({
@@ -13,64 +12,45 @@ function mockJson(status: number, payload: unknown) {
 
 const lastRequest = () => (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
 
-describe('authToken', () => {
-  afterEach(() => setStoredToken(null));
-
-  it('round-trips a token', () => {
-    setStoredToken('abc.def.ghi');
-    expect(getStoredToken()).toBe('abc.def.ghi');
-    setStoredToken(null);
-    expect(getStoredToken()).toBeNull();
-  });
-
-  it('never throws when storage is unavailable', () => {
-    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-      throw new Error('SecurityError: storage blocked');
-    });
-    // Private-mode Safari and blocked site data both throw here; an auth check
-    // must degrade to "signed out", not crash the app.
-    expect(() => getStoredToken()).not.toThrow();
-    expect(getStoredToken()).toBeNull();
-    spy.mockRestore();
-  });
-});
-
 describe('apiClient authentication', () => {
   beforeEach(() => {
     globalThis.fetch = mockJson(200, { success: true, data: { ok: true } });
   });
 
   afterEach(() => {
-    setStoredToken(null);
     setUnauthorizedHandler(null);
     vi.unstubAllGlobals();
   });
 
   /**
-   * The client and API are deployed separately, so every request is cross-site.
-   * `SameSite=Lax` cookies are not sent cross-site, which is why the JWT must
-   * also travel as a Bearer token.
+   * The session is an httpOnly cookie set by the server. `credentials:
+   * 'include'` is what makes the browser attach it — cross-origin requests omit
+   * cookies by default, and without this every authenticated call 401s.
    */
-  it('sends the stored token as a Bearer header', async () => {
-    setStoredToken('a-real-token');
+  it('sends credentials on every request so the session cookie travels', async () => {
     await api.get('/products');
+    expect(lastRequest()[1].credentials).toBe('include');
 
-    const [, init] = lastRequest();
-    expect(init.headers.Authorization).toBe('Bearer a-real-token');
+    vi.mocked(globalThis.fetch).mockClear();
+    await api.post('/customers', { firstName: 'Ananya' });
+    expect(lastRequest()[1].credentials).toBe('include');
   });
 
-  it('sends no Authorization header when signed out', async () => {
+  /**
+   * The regression guard for this change: the client must hold no token at all.
+   * An Authorization header could only come from a token the client had stored,
+   * which is exactly the XSS exposure the httpOnly cookie removes.
+   */
+  it('never sends an Authorization header', async () => {
     await api.get('/products');
-
-    const [, init] = lastRequest();
-    expect(init?.headers?.Authorization).toBeUndefined();
+    expect(lastRequest()[1]?.headers?.Authorization).toBeUndefined();
   });
 
-  it('still sends credentials, so a same-origin cookie deployment keeps working', async () => {
+  it('stores nothing in the browser', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
     await api.get('/products');
-
-    const [, init] = lastRequest();
-    expect(init.credentials).toBe('include');
+    expect(setItem).not.toHaveBeenCalled();
+    setItem.mockRestore();
   });
 
   it('sets the JSON content type only when there is a body', async () => {
@@ -128,6 +108,10 @@ describe('apiClient base URL', () => {
   });
 
   it('defaults to a same-origin /api path', async () => {
+    // Stubbed rather than left unset: Vitest loads the developer's own .env, so
+    // relying on the variable being absent makes this test machine-dependent.
+    // An empty value must behave exactly like an unset one.
+    vi.stubEnv('VITE_API_URL', '');
     vi.resetModules();
     globalThis.fetch = mockJson(200, { success: true, data: {} });
     const { api: freshApi } = await import('./apiClient');

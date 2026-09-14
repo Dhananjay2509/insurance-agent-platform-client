@@ -66,7 +66,9 @@ describe('<LoginPage />', () => {
         role: 'AGENT',
         createdAt: new Date().toISOString(),
       },
-      token: 'token',
+      // Returned for non-browser clients; the SPA ignores it and relies on the
+      // httpOnly cookie the server sets on this response.
+      token: 'ignored-by-the-browser',
     });
 
     renderLogin();

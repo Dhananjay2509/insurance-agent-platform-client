@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { authApi } from '../services';
 import { setUnauthorizedHandler } from '../services/apiClient';
-import { getStoredToken, setStoredToken } from '../services/authToken';
 import type { Agent } from '../types/api';
 
 interface AuthContextValue {
@@ -18,11 +17,12 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 /**
  * Session state.
  *
- * The server issues the JWT twice: as an httpOnly cookie (used when the SPA and
- * API share an origin) and in the response body (kept here and sent as a Bearer
- * token when they do not). Either way the client cannot tell whether a session
- * is still valid without asking, so on mount the provider calls `/auth/me`
- * once; a 401 simply means "signed out".
+ * The session lives entirely in an httpOnly cookie the server sets. This client
+ * never sees the token, so the only way to know whether a session exists is to
+ * ask the server: on mount the provider calls `/auth/me` once, and a 401 simply
+ * means "signed out".
+ *
+ * Nothing is persisted here. Sign-out is whatever the server says it is.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [agent, setAgent] = useState<Agent | null>(null);
@@ -34,11 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authApi
       .me(controller.signal)
       .then((data) => setAgent(data.agent))
-      .catch(() => {
-        setAgent(null);
-        // A stored token the server no longer accepts is dead weight.
-        if (getStoredToken()) setStoredToken(null);
-      })
+      .catch(() => setAgent(null))
       .finally(() => {
         if (!controller.signal.aborted) setInitialising(false);
       });
@@ -49,23 +45,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // A 401 from any request means the cookie expired or was revoked. Clearing
   // state here sends the user to /login from one place rather than each caller.
   useEffect(() => {
-    setUnauthorizedHandler(() => {
-      setAgent(null);
-      setStoredToken(null);
-    });
+    setUnauthorizedHandler(() => setAgent(null));
     return () => setUnauthorizedHandler(null);
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
+    // The server sets the session cookie on this response; nothing to store.
     const data = await authApi.login({ email, password });
-    setStoredToken(data.token);
     setAgent(data.agent);
   }, []);
 
   const register = useCallback(
     async (input: { name: string; email: string; password: string; phone: string }) => {
       const data = await authApi.register(input);
-      setStoredToken(data.token);
       setAgent(data.agent);
     },
     [],
@@ -76,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await authApi.logout();
     } finally {
       // Clear locally even if the request failed — the user asked to sign out.
-      setStoredToken(null);
+      // The cookie itself is cleared by the server on /auth/logout.
       setAgent(null);
     }
   }, []);

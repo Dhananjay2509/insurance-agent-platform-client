@@ -14,11 +14,11 @@ only needs the Root Directory and one environment variable.
 | Build Command | `npm run build` |
 | Output Directory | `dist` |
 
-> **`--include=dev` is not optional.** Setting `NODE_ENV=production` as a Vercel
-> environment variable makes npm set `omit=dev` and skip every devDependency —
-> and `vite` and `typescript` are devDependencies. The build then fails with
-> `sh: line 1: tsc: command not found`. This project does not need `NODE_ENV` at
-> all, but the install command is pinned so it cannot break if you add it.
+> **Why devDependencies always install.** Setting `NODE_ENV=production` makes npm
+> set `omit=dev` and skip every devDependency — and `vite` and `typescript` are
+> devDependencies, so the build would fail with
+> `sh: line 1: tsc: command not found`. A committed `.npmrc` containing
+> `include=dev` overrides that, so no dashboard setting is required.
 
 ## Deploy the API first
 
@@ -67,7 +67,7 @@ Simpler, if you do not need previews: test against production only.
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| Build fails: `sh: line 1: tsc: command not found` | `NODE_ENV=production` made npm skip devDependencies | Install command must be `npm install --include=dev` |
+| Build fails: `tsc: command not found` | devDependencies were skipped | The committed `.npmrc` (`include=dev`) fixes this; redeploy without a cached install |
 | Login page renders, nothing loads, console shows a CORS error | `CLIENT_URL` on the API does not match this deployment's origin | Set it on Render (with `https://`, no trailing slash) and redeploy the API |
 | Requests go to the client's own origin instead of the API | `VITE_API_URL` unset at build time | Set it and **redeploy** — a dashboard edit alone has no effect |
 | Requests 404 with a doubled or missing path | `VITE_API_URL` missing the `/api` suffix, or has a trailing slash | Use `https://<service>.onrender.com/api` |
